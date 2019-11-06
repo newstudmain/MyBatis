@@ -1,0 +1,269 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="SimpleDemo.dao.EmpMapper">
+	<!-- 
+		namespace:名称空间   
+					指定为接口的全类名 [接口与配置文件动态绑定]
+						namespace="org.mybatis.example.EmpMapper"
+						namespace="SimpleDemo.dao.EmpMapper"
+		id:唯一标识
+		resultType:返回值类型
+		#{id}:从传递过来的参数中取出id值
+		
+		public Emp getEmpById(Integer id);//select id="selectEmp" >> select id="getEmpById"
+	 -->
+	 
+					<!-- resultType="SimpleDemo.bean.Emp" 使用别名 emp -->
+  <select id="getEmpById" resultType="SimpleDemo.bean.Emp" databaseId="oracle">
+    <!--  select id "id",last_name "lastname",first_name "firstname",salary "salary",start_date "date" from s_emp where id = #{id} -->
+ 	select id,last_name,first_name,salary,start_date from s_emp where id = #{id}
+  </select>
+  
+  
+  <!-- 
+  		resultMap自定义某个javabean的封装规则
+  		
+	  		type：自定义的java规则
+	  		id： 唯一id方便引用
+  			column: 指定哪一列
+  			property: 指定相对应的javabean属性
+  			
+  		此时和驼峰命名setting已经没有关系
+   -->
+  <resultMap type="SimpleDemo.bean.Emp" id="myemp">
+  	
+  	<!-- 定义主键 ，底层有优化 -->
+  	<id column="id" property="id"/>
+  	
+  	<!-- 定义普通列封装规则 -->
+  	<result column="last_name" property="lastName"/>
+  	<!-- 其他命名无特殊字段 可以不指定 mybatis 会自动封装，
+  		  但我们只要写resultMap 就全部指定上映射规则，方便后期检查
+  	 -->
+  	 <result column="first_name" property="firstName"/>
+  	 <result column="salary" property="salary"/>
+  	 <result column="age" property="age"/>
+  	 <result column="start_date" property="startDate"/>
+  </resultMap>
+  
+  <!-- [同 id="getEmpById" ，不带databaseId标签，被舍去]-->
+   <select id="getEmpById" resultType="myemp">
+    <!--  select id "id",last_name "lastname",first_name "firstname",salary "salary",start_date "date" from s_emp where id = #{id} -->
+ 	select id,last_name,first_name,salary,start_date from s_emp where id = #{id}
+  </select>
+  
+  <!-- public Emp getEmpByIdAndlastName(Integer id,String lastName); -->
+  <select id="getEmpByIdAndlastName" resultType="SimpleDemo.bean.Emp">
+  	 	select id,last_name,first_name,salary,start_date 
+ 		from s_emp 
+ 		where id = #{arg0} and last_name=#{arg1}
+  </select>
+  
+  <!-- public void addEmp(Emp emp);-->
+  <insert id="addEmp" parameterType="SimpleDemo.bean.Emp">
+  	insert into s_emp(id,last_name,first_name,salary,start_date) 
+  	values(#{id},#{lastName},#{firstName<!--,jdbcType=NULL-->},#{salary},#{startDate})
+  </insert>
+  
+  <!-- 
+  		oracle 不支持自增主键 ，oracle使用序列模拟自增
+  		每次自增的主键是从序列中拿到值，如何获取此值：
+  			
+   -->
+  <!-- public void addStu(Student stu);-->
+  <insert id="addStu" parameterType="SimpleDemo.bean.Student" databaseId="oracle">
+  	<!-- keyProperty:查出的主键值封装给javabean的哪个属性
+  		 order="BEFORE" 在当前sql插入之前执行
+  		 		AFTER   在当前sql插后之前执行
+  		 resultType="Integer" 查出的字段返回值类型
+  		 
+  		 运行循序：selectKey >> 查询主键的sql语句 >> id值 >> javabean id属性
+  		 		再运行插入的sql ,就可以取出id属性对应的值
+  	 -->
+  	<selectKey keyProperty="id" order="BEFORE" resultType="Integer" >
+  		<!-- 编写查询主键的sql语句 -->
+  		select student_seq.nextval from dual
+  		<!-- select student_seq.currval from dual 
+  			 order="AFTER"
+  		-->
+  	</selectKey>
+  	<!-- 插入时的主键是从序列中拿到的 -->
+  	insert into student(id,name,password,age,gender) 
+  	values(#{id},#{name},#{password},#{age},#{gender})
+  	<!-- 
+  		insert into student(id,name,password,age,gender) 
+  		values(student_seq.nextval,#{name},#{password},#{age},#{gender});
+  	 -->
+  </insert>
+  
+  <!-- public void updateEmp(Emp emp); -->
+  <update id="updateEmp">
+  	update s_emp 
+  	set last_name=#{lastName}
+  	where id=#{id}
+  </update>
+  
+  <!-- public void daleteEmpById(Integer id); -->
+  <delete id="deleteEmpById">
+  	delete from s_emp where id=#{id}
+  </delete>
+  
+  <!-- public List<Emp> getEmpBytitle(String title); -->
+    <!-- 
+  	如果返回的是一个集合 ，要写集合中的元素类型
+   -->
+  <select id="getEmpBytitle" resultType="SimpleDemo.bean.Emp" >
+  	SELECT id,last_name,first_name,salary,start_date  
+  	FROM s_emp
+  	WHERE title =#{title}
+  </select>
+  
+  <!-- public List<Emp> getEmpByDeptID(Integer deptID); -->
+  <select id="getEmpByDeptID" resultType="SimpleDemo.bean.Emp">
+  	SELECT id,last_name,first_name,salary,start_date  
+  	FROM s_emp
+  	WHERE dept_id =#{deptID}
+  </select>
+  
+  
+  <!-- public Map<String,Object> getEmpByMap(Integer id); -->
+  <!-- 
+	  	String:列名
+	  	Object：列名对应的值
+   -->
+  <select id="getEmpByMap" resultType="map" >
+  	SELECT id,last_name,first_name,salary,start_date  
+  	FROM s_emp
+  	WHERE id =#{id}
+  </select>
+  
+  <!-- 
+  	告诉mybatis封装这个map时用那个列作为key值
+  	@MapKey("id")
+  	public Map<Integer,Emp> getEmpByTitleMap(String title); 
+  -->
+  <select id="getEmpByTitleMap" resultType="SimpleDemo.bean.Emp">
+  	SELECT id,last_name,first_name,salary,start_date  
+  	FROM s_emp
+  	WHERE title =#{title}
+  </select>
+  
+ <!-- 
+ 	情景一：查询多张表数据  关联一个对象 
+ 		
+ 		使用级联 ，association ，分布查询
+ 		
+	 	select * 
+	    from s_emp e,s_dept d
+	    where e.dept_id=d.id
+	    and
+	    e.id=10;
+ 	
+  -->
+  
+  <resultMap type="SimpleDemo.bean.Emp_Dept" id="empdept">
+  
+  	 <id column="id" property="id"/>
+  	 <result column="last_name" property="lastName"/>
+  	 <result column="first_name" property="firstName"/>
+  	 <result column="salary" property="salary"/>
+  	 <result column="start_date" property="startDate"/>
+  	 <result column="did" property="Dept.id"/>
+  	 <result column="dname" property="Dept.name"/>
+  	 <result column="region_Id" property="Dept.regionId"/>
+  </resultMap>
+  
+  <resultMap type="SimpleDemo.bean.Emp_Dept" id="empdept2">
+  
+  	 <id column="id" property="id"/>
+  	 <result column="last_name" property="lastName"/>
+  	 <result column="first_name" property="firstName"/>
+  	 <result column="salary" property="salary"/>
+  	 <result column="start_date" property="startDate"/>
+
+	<!-- 可以指定联合的javabean对象 
+			property="Dept" 指定哪个属性是联合的对象
+			javaType="" 	指定这个属性的对象类型
+	-->
+	<association property="Dept" javaType="SimpleDemo.bean.Dept">
+		<id column="did" property="id"/>
+		<result column="dname" property="name"/>
+		<result column="region_Id" property="regionId"/>
+	</association>
+
+  </resultMap>
+  
+  <!-- public Emp getEmpDeptById(Integer id); -->
+  <select id="getEmpDeptById" resultMap="empdept2"> <!-- [注意区分]resultType="" -->
+      select e.id "id",e.last_name "last_name",e.first_name "first_name", 
+                e.salary "salary",e.start_date "start_date",d.id "did",d.name "dname",d.region_id "region_Id"
+	    from s_emp e,s_dept d
+	    where e.dept_id=d.id
+	    and
+	    e.id=#{id}
+  </select>
+  
+  <!-- 使用association标签分布查询 
+  		1. 先按s_emp 中的id查询员工信息
+  		2. 根据s_emp 信息中的dept_id 值去部门表中查出部门信息
+  		3. 部门信息设置到员工表中
+  -->
+  
+  <resultMap type="SimpleDemo.bean.Emp_Dept" id="empdeptstep">
+  
+  	<id column="id" property="id"/>
+  	<result column="last_name" property="lastName"/>
+  	<result column="first_name" property="firstName"/>
+  	<result column="salary" property="salary"/>
+  	<result column="start_date" property="startDate"/>
+  	
+  	<!--association定义关联对象封装规则
+  			select：当前属性是调用 select 指定的方法查询出的结果
+  			
+  		使用select 指定的方法查出对象（传入column指定的这列参数的值），并封装给property属性
+  		
+  		  <可以使用延时加载	在分布查询的基础之上 配置全局setting 属性>
+  		  		<setting name="lazyLoadingEnabled" value="true"/>
+				<setting name="aggressiveLazyLoading" value="false"/>
+				
+			<扩展     多列值得传递[column 参数]>、
+				使用 Map封装多列值，进行传递
+				column ="{key1=column1,key2=column2}"
+			
+			fetchType="lazy"
+				-lazy	延时加载
+				-eager	立即加载	
+  	 -->
+  	<association property="dept" select="SimpleDemo.dao.DeptMapper.getDeptById" 
+  				 column="dept_id" fetchType="lazy">
+  	
+  	</association>
+  	
+  </resultMap>
+  
+  <!-- public Emp_Dept getEmpDeptByIdStep(Integer id); -->
+  <select id="getEmpDeptByIdStep" resultMap="empdeptstep">
+  	SELECT id,last_name,first_name,salary,start_date,dept_id  
+  	FROM s_emp
+  	WHERE id =#{id} 
+  </select>
+  
+ <!-- 
+ 	情景二：查询多张表数据  
+ 			查询部门的时候部门对应的员工信息全部查出来  参见DeptMapper.xml
+ 			
+ 		使用级联 ，association ，分布查询
+ 		
+	 	select * 
+	    from s_emp e,s_dept d
+	    where e.dept_id=d.id
+	    and
+	    e.id=10;
+ 	
+  -->
+  
+  
+  
+</mapper>

@@ -1,0 +1,264 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE configuration
+  PUBLIC "-//mybatis.org//DTD Config 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-config.dtd">
+<configuration>
+
+<!-- 
+	标签顺序
+Content Model : (properties?, settings?, typeAliases?, typeHandlers?, objectFactory?, 
+ objectWrapperFactory?, reflectorFactory?, plugins?, environments?, databaseIdProvider?, mappers?) -->
+
+	<!-- 
+		MyBatis 可以使用properties标签来引入外部properties配置文件的内容
+				resource:类路径中
+				url:网络中
+		后期将会整合进Spring中，了解。
+	 -->
+	<properties resource="jdbc.properties"></properties>
+
+	<!-- 
+		Settings 包含了很多重要的设置项
+			setting 用来设置每一个设置项
+					name: 设置项名
+					value: 设置项值
+			mapUnderscoreToCamelCase
+					是否开启自动驼峰命名规则（camel case）映射，
+					即从经典数据库列名 A_COLUMN 到经典 Java 属性名 aColumn 的类似映射。
+					
+						private BigDecimal id;//ID
+						private String lastName;//LAST_NAME 
+						private String firstName;//FIRST_NAME
+						private BigDecimal salary;//SALARY
+						private Date stratDate;//START_DATE
+						
+			默认 false 
+			
+			lazyLoadingEnabled	延迟加载的全局开关。当开启时，所有关联对象都会延迟加载。 
+								特定关联关系中可通过设置 fetchType 属性来覆盖该项的开关状态。
+								默认 false
+								
+			aggressiveLazyLoading	当开启（true）时，任何方法的调用都会加载该对象的所有属性。 
+									否则，每个属性会按需加载（参考 lazyLoadTriggerMethods)。
+	 -->
+	<settings>
+		<setting name="mapUnderscoreToCamelCase" value="true"/>
+		<setting name="jdbcTypeForNull" value="NULL"/>
+		
+		<!-- 显示指定每一个要配置的值，及时默认的配置也显示的指定他 -->
+		<setting name="lazyLoadingEnabled" value="true"/>
+		<setting name="aggressiveLazyLoading" value="false"/>
+	</settings>	
+
+	 	<!-- 
+		typeAliases:为某个java类型起别名 别名不区分大小写
+			类型别名是为 Java 类型设置一个短的名字。 
+			它只和 XML 配置有关，存在的意义仅在于用来减少类完全限定名的冗余。
+			type：指定要起别名的全类名：默认别名就是类名小写 
+				<typeAlias type="SimpleDemo.bean.Emp"/> ==》 [emp]
+				或者自定义指定 使用alias选项
+				<typeAlias type="SimpleDemo.bean.Emp" alias="emp"/>
+				
+		- package批量起别名: 为某个包下的所有类型批量起别名 默认别名就是类名小写 ，如果多个包相同类会有冲突问题
+		
+		- 批量起别名下，使用注解@Alias 为某个类型指定新的别名
+			@Alias("emp")
+			public class Emp {
+			}
+			
+			这是一些为常见的 Java 类型内建的相应的类型别名。
+			_long...
+			它们都是不区分大小写的，注意对基本类型名称重复采取的特殊命名风格。
+			
+		【但是】：
+			还是使用全类名的方式 ，利于后期查看相关类信息	
+	 -->
+<!--  	
+	 <typeAliases>
+	 
+	 <package name="SimpleDemo.bean"/>
+	 
+	 	<!- <typeAlias type="SimpleDemo.bean.Emp" alias="emp"/> ->
+	 </typeAliases>
+-->	 
+
+<!-- 
+	MyBatis 可以配置成适应多种环境，
+				这种机制有助于将 SQL 映射应用于多种数据库之中， 
+				现实情况下有多种理由需要这么做。
+				例如，开发、测试和生产环境需要有不同的配置；
+				或者想在具有相同 Schema 的多个生产数据库中 使用相同的 SQL 映射。
+		environment  配置一个具体的环境
+					transactionManager
+					dataSource
+					两个标签必须有
+					
+		注意这里的关键点:
+
+			id: 每个 environment 元素定义的环境 的唯一标识 （比如：id="development"）
+				 默认使用的环境 ID（比如：default="development"）。
+				 
+				 	通过 <environments default="development">切换环境
+				 	 	<environments default="test">
+				 	
+			transactionManager: 事务管理器的配置（比如：type="JDBC"）。
+								type：事务管理器的类型  JDBC(JdbcTransactionFactory) | MANAGED(ManagedTransactionFactory)
+								/Open Type，或者按下Ctrl+Shift+T/
+								
+					JDBC – 		这个配置就是直接使用了 JDBC 的提交和回滚设置，它依赖于从数据源得到的连接来管理事务作用域。
+					
+								class Configuration>>
+									typeAliasRegistry.registerAlias("JDBC", JdbcTransactionFactory.class);
+									JdbcTransactionFactory implements TransactionFactory
+								
+					MANAGED –   这个配置几乎没做什么。它从来不提交或回滚一个连接，
+								而是让容器来管理事务的整个生命周期（比如 JEE 应用服务器的上下文）。
+								默认情况下它会关闭连接，然而一些容器并不希望这样，
+								因此需要将 closeConnection 属性设置为 false 来阻止它默认的关闭行为。
+					
+					自定义  —     xxclass 实现 TransactionFactory 接口 
+							       在 class Configuration>> 中 注册 别名
+					
+			
+			dataSource：数据源的配置（ type=”[UNPOOLED|POOLED|JNDI]”）。
+								UNPOOLED(UnpooledDataSourceFactory)
+										这个数据源的实现只是每次被请求时打开和关闭连接。
+										虽然有点慢，但对于在数据库连接可用性方面没有太高要求的简单应用程序来说，是一个很好的选择。 
+										不同的数据库在性能方面的表现也是不一样的，对于某些数据库来说，使用连接池并不重要，这个配置就很适合这种情形。
+										UNPOOLED 类型的数据源具有以下属性。
+													driver – 这是 JDBC 驱动的 Java 类的完全限定名（并不是 JDBC 驱动中可能包含的数据源类）。
+													url – 这是数据库的 JDBC URL 地址。
+													username – 登录数据库的用户名。
+													password – 登录数据库的密码。
+													defaultTransactionIsolationLevel – 默认的连接事务隔离级别。
+													defaultNetworkTimeout – The default network timeout value in milliseconds to wait for the database operation to complete. See the API documentation of java.sql.Connection#setNetworkTimeout() for details.
+													作为可选项，你也可以传递属性给数据库驱动。只需在属性名加上“driver.”前缀即可，例如：
+														driver.encoding=UTF8
+														这将通过 DriverManager.getConnection(url,driverProperties) 方法传递值为 UTF8 的 encoding 属性给数据库驱动。
+								POOLED(PooledDataSourceFactory)
+										这种数据源的实现利用“池”的概念将 JDBC 连接对象组织起来，避免了创建新的连接实例时所必需的初始化和认证时间。 这是一种使得并发 Web 应用快速响应请求的流行处理方式。
+										除了上述提到 UNPOOLED 下的属性外，还有更多属性用来配置 POOLED 的数据源：
+													poolMaximumActiveConnections – 在任意时间可以存在的活动（也就是正在使用）连接数量，默认值：10
+													poolMaximumIdleConnections – 任意时间可能存在的空闲连接数。
+													poolMaximumCheckoutTime – 在被强制返回之前，池中连接被检出（checked out）时间，默认值：20000 毫秒（即 20 秒）
+													poolTimeToWait – 这是一个底层设置，如果获取连接花费了相当长的时间，连接池会打印状态日志并重新尝试获取一个连接（避免在误配置的情况下一直安静的失败），默认值：20000 毫秒（即 20 秒）。
+													poolMaximumLocalBadConnectionTolerance – 这是一个关于坏连接容忍度的底层设置， 作用于每一个尝试从缓存池获取连接的线程。 如果这个线程获取到的是一个坏的连接，那么这个数据源允许这个线程尝试重新获取一个新的连接，但是这个重新尝试的次数不应该超过 poolMaximumIdleConnections 与 poolMaximumLocalBadConnectionTolerance 之和。 默认值：3 （新增于 3.4.5）
+													poolPingQuery – 发送到数据库的侦测查询，用来检验连接是否正常工作并准备接受请求。默认是“NO PING QUERY SET”，这会导致多数数据库驱动失败时带有一个恰当的错误消息。
+													poolPingEnabled – 是否启用侦测查询。若开启，需要设置 poolPingQuery 属性为一个可执行的 SQL 语句（最好是一个速度非常快的 SQL 语句），默认值：false。
+													poolPingConnectionsNotUsedFor – 配置 poolPingQuery 的频率。可以被设置为和数据库连接超时时间一样，来避免不必要的侦测，默认值：0（即所有连接每一时刻都被侦测 — 当然仅当 poolPingEnabled 为 true 时适用）。
+																					
+								JNDI(JndiDataSourceFactory)
+								
+								自定义
+			
+ -->
+	 
+  <environments default="development">
+  
+  <environment id="test">
+  	<transactionManager type="JDBC"></transactionManager>
+  	<dataSource type="UNPOOLED">
+  		<property name="driver" value="${driver}"/>
+        <property name="url" value="${url}"/>
+        <property name="username" value="${user}"/>
+        <property name="password" value="${password}"/>
+  	</dataSource>
+  </environment>
+  
+    <environment id="development">
+      <transactionManager type="JDBC"/>
+      
+      <dataSource type="POOLED">
+        <property name="driver" value="${driver}"/>
+        <property name="url" value="${url}"/>
+        <property name="username" value="${user}"/>
+        <property name="password" value="${password}"/>
+        
+        <!-- 
+        <property name="driver" value="oracle.jdbc.OracleDriver"/>
+        <property name="url" value="jdbc:oracle:thin:@127.0.0.1:1521:XE"/>
+        <property name="username" value="jdsy1707"/>
+        <property name="password" value="jdsy1707"/>
+         -->
+      </dataSource>
+      
+    </environment>
+  </environments>
+  
+  <!-- 
+  		databaseIdProvider支持多数据库厂商
+  				MyBatis 可以根据不同的数据库厂商标识 ( String getDatabaseProductName() 
+          		检索此数据库产品的名称。 )执行不同的语句，这种多厂商的支持是基于映射语句中的 databaseId 属性。 
+  				MyBatis 会加载不带 databaseId 属性和带有匹配当前数据库 databaseId 属性的所有语句。 
+  				如果同时找到带有 databaseId 和不带 databaseId 的相同语句，则后者会被舍弃。 
+  				为支持多厂商特性只要像下面这样在 mybatis-config.xml 文件中加入 databaseIdProvider 即可
+  				
+  				Mapper.xml中>>
+  					<select id="getEmpById" resultType="SimpleDemo.bean.Emp" databaseId="oracle">
+  				
+  		在提供了属性别名时，DB_VENDOR 的 databaseIdProvider 实现会将 databaseId 设置为第一个数据库产品名与属性中的名称相匹配的值，
+  		如果没有匹配的属性将会设置为 “null”。 在这个例子中，如果 getDatabaseProductName() 返回“Oracle (DataDirect)”，databaseId 将被设置为“oracle”。
+		你可以通过实现接口 org.apache.ibatis.mapping.DatabaseIdProvider 并在 mybatis-config.xml 中注册来构建自己的 DatabaseIdProvider：
+				
+				public interface DatabaseIdProvider {
+				  default void setProperties(Properties p) { // Since 3.5.2, change to default method
+				    // NOP
+				  }
+				  String getDatabaseId(DataSource dataSource) throws SQLException;
+				}
+   -->
+  <databaseIdProvider type="DB_VENDOR">
+  	<!-- 为不同数据库厂商起别名 -->
+  	<property name="Oracle" value="oracle"/>
+  </databaseIdProvider>
+  
+  <!-- 
+  	mapper 将写好的sql映射文件(EmpMapper.xml)，一定要注册到全局配置文件中
+  			resource：类路径下的sql映射文件
+  						项目名/包名/文件名[规范]
+  			url： 引用网络或磁盘中的文件
+  			class： 引用(注册)接口
+  			
+  				<mapper class="SimpleDemo.dao.EmpMapper"/>
+  				
+  				   1. 有Sql映射文件，映射文件名必须与接口同名，放在同一目录下
+  				   	
+	  				   /MyBatis/src/SimpleDemo/dao/EmpMapper.java
+	  				   >>
+	  				   /MyBatis/src/SimpleDemo/dao/EmpMapper.xml
+					  
+					   {/MyBatis/conf/EmpMapper.xml}
+  				   
+  				   2. 基于注解，没有sql映射文件，所有sql都是利用注解写在接口上
+  				   
+  				   		public interface EmpMapper {
+							@Select("select id,last_name,first_name,salary,start_date from s_emp where id = #{id}")
+							public Emp getEmpById(Integer id);
+						}
+  				   		
+  				  比较重要的写在sql映射文件中，不重要的可以使用注解上 		
+   -->
+  <mappers>
+  	<!-- 
+  		package: 批量注册同包名下所有的映射文件，接口和映射文件在同一包下
+  		<package name="SimpleDemo.dao"/>
+  		
+  		批量注册之后较为常用
+  			小技巧：
+  				src 
+				  |- SimpleDemo.dao
+				      |- EmpMapper.java
+				conf
+				  |- SimpleDemo.dao
+				      |- EmpMapper.xml
+				      
+				此时在原始工程中EmpMapper.java 和EmpMapper.xml 在同包下，合并到类路径bin下
+				但在实际工程中在不同文件下中，便于管理
+  	 -->
+  	
+    <mapper resource="SimpleDemo/dao/EmpMapper.xml"/>
+    <mapper resource="SimpleDemo/dao/DeptMapper.xml"/>
+    <mapper resource="SimpleDemo/dao/EmpDynamicMapper.xml"/>
+  </mappers>
+  
+</configuration>

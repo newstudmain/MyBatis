@@ -1,0 +1,279 @@
+单个参数，MyBatis 不会做参数处理
+	public Emp getEmpById(Integer id);
+	
+	<select id="getEmpById" resultType="SimpleDemo.bean.Emp" databaseId="oracle">
+ 		select id,last_name,first_name,salary,start_date 
+ 		from s_emp 
+ 		where id = #{id}
+  	</select>
+	
+	#{参数名} //参数名 没有特殊要求 
+	
+多个参数，MyBatis 会做特殊处理
+	多个参数会被封装成一个map
+		key : param1...paramN
+		value : 传入的值
+	#{} 就是从map中取出指定的key值，或者参数的索引也行
+		
+	public Emp getEmpByIdAndlastName(Integer id,String lastName);
+	
+	<select id="getEmpByIdAndlastName" resultType="SimpleDemo.bean.Emp" databaseId="oracle">
+ 		select id,last_name,first_name,salary,start_date 
+ 		from s_emp 
+ 		where id = #{id} and #{laseName}
+  	</select>
+  	
+	#{id},#{lastName} [异常]
+		### Error querying database.  Cause: org.apache.ibatis.binding.BindingException: 
+										Parameter 'id' not found. Available parameters are [arg1, arg0, param1, param2]
+		### Cause: org.apache.ibatis.binding.BindingException:
+										Parameter 'id' not found. Available parameters are [arg1, arg0, param1, param2]
+	#{param1},#{param2}
+	#{arg0},#{arg1}
+	
+命名参数，明确指定封装参数指定的key
+	public Emp getEmpByIdAndlastName(@Param("id")Integer id,@Param("lastName")String lastName);
+		
+		key : 使用@parameter注解指定的值
+		value : 传入的参数值
+		
+	#{指定的key}  取出 对应的参数值 
+	#{id},#{lastName} 
+	
+如果多个参数正是业务逻辑的数据模型，可以直接传入pojo*
+	#{属性名 } 去处pojo中的属性值
+
+	
+如果多个参数不是业务逻辑的数据模型，没有对应的pojo，为了方便可以传入map*
+		public Emp getEmpByIdAndlastName(Map<String ,Object>);
+		
+			Map<String,Object> map =new HashMap<>();
+			map.put("id",1);
+			map.put("lastName","tom");
+		...	
+		where id = #{id} and #{laseName}
+		
+
+如果多个参数虽然不是业务逻辑的数据模型，但是经常要使用，推荐编写一个TO(Transfer Object) 数据传输对象*
+
+	page{
+		int index;
+		int size;
+	}
+
+=================================思考===============================================
+
+public Emp getEmp(@param("id")Integer id,String lastName){}
+	取值：id >> #{id/param1}  ;	lastName >> #{param2}
+	
+public Emp getEmp(Integer id,@param("e")Emp emp){}
+	取值：id >> #{param1}  ;	lastName >> #{param2.lastName/e.lastName}
+
+##特别注意，如果是 List ,Set ,Array。会特殊处理，会把他们封装到map中	
+public Emp getEmp(List<Integer> ids){}	
+	取值：id >> #{ids[0]};XX #{list[0]}
+
+================================结合源码分析==========================================
+
+			EmpMapper mapper = openSession.getMapper(EmpMapper.class);
+			Emp emp = mapper.getEmpById(5);
+
+1. final int paramCount = names.size();
+			[ public Emp getEmpById(Integer id); ]
+	names ..> key-value
+		key=Integer 0
+		value=arg0 
+	1). 获取每一个标注解的@Param()值， 如 id,lastName, 赋值给name;
+	2).	每次解析一个参数给map中保存信息，(key:参数索引 ，value: name的值)
+		name的值：
+			标注了param注解，注解的值
+			没有标注param注解
+				如果全局配置：config.isUseActualParamName() (jdk 1.8) ; name =参数名
+				name = map.size() ,相当于当前元素的索引
+	
+
+  public Object getNamedParams(Object[] args) {
+    final int paramCount = names.size();
+    //1. 参数为空直接返回
+    if (args == null || paramCount == 0) {
+      return null;
+      
+      			//如果只有一个元素，并且没有注解，args[0] 单个参数直接返回
+    } else if (!hasParamAnnotation && paramCount == 1) {
+      return args[names.firstKey()];
+      
+      //多个元素，并标了注解
+    } else {
+      final Map<String, Object> param = new ParamMap<>();
+      int i = 0;
+      
+      //遍历names集合；{0=id, 1=lastName}
+      for (Map.Entry<Integer, String> entry : names.entrySet()) {
+      	
+      	//names集合的value作为Key； names 集合的Key又作为取值的参考args[0] args[1,"tom"]
+      	//eg {id=args[0],lastName=args[1]}
+        param.put(entry.getValue(), args[entry.getKey()]);
+        // add generic param names (param1, param2, ...)
+        
+        //额外将每一个参数也保存到map中，使用新的(param1, param2, ...)
+        final String genericParamName = GENERIC_NAME_PREFIX + String.valueOf(i + 1);
+        // ensure not to overwrite parameter named with @Param
+        if (!names.containsValue(genericParamName)) {
+          param.put(genericParamName, args[entry.getKey()]);
+        }
+        i++;
+      }
+      return param;
+    }
+  }
+}
+
+...>>
+
+  private final SortedMap<Integer, String> names;
+
+  private boolean hasParamAnnotation;
+
+  public ParamNameResolver(Configuration config, Method method) {
+    final Class<?>[] paramTypes = method.getParameterTypes();
+    final Annotation[][] paramAnnotations = method.getParameterAnnotations();
+    final SortedMap<Integer, String> map = new TreeMap<>();
+    int paramCount = paramAnnotations.length;
+    // get names from @Param annotations
+    for (int paramIndex = 0; paramIndex < paramCount; paramIndex++) {
+      if (isSpecialParameter(paramTypes[paramIndex])) {
+        // skip special parameters
+        continue;
+      }
+      String name = null;
+      for (Annotation annotation : paramAnnotations[paramIndex]) {
+        if (annotation instanceof Param) {
+          hasParamAnnotation = true;
+          name = ((Param) annotation).value();
+          break;
+        }
+      }
+      if (name == null) {
+        // @Param was not specified.
+        if (config.isUseActualParamName()) {
+          name = getActualParamName(method, paramIndex);
+        }
+        if (name == null) {
+          // use the parameter index as the name ("0", "1", ...)
+          // gcode issue #71
+          name = String.valueOf(map.size());
+        }
+      }
+      map.put(paramIndex, name);
+    }
+    names = Collections.unmodifiableSortedMap(map);
+  }
+
+==============================参数值的获取=============================================
+#{} 以预编译方式，使用占位符将参数设置到sql语句中 preparedStatement 防止注入
+	大多数情况使用#{}
+	
+	where id = #{id} and last_name =#{laseName}
+	...>
+	where id=? and last_name =?
+	
+${} 取出的值直接拼接在sql语句中，有安全问题
+	
+	原生jdbc不支持占位符的地方可以使用${}
+	如分表:按年份分表拆分
+		select * from ${year}_salary where xxx;
+		select * from s_emp order by ${f_name}  ${order}
+		select * from ${tableName} ;
+
+	where id = ${id} and last_name =#{laseName}
+	...>
+	where id=2 and last_name =?
+
+#{} 更丰富的用法
+	规定参数的一些规则
+	javaType jdbcType mode(存储过程) numericScale
+	resultMap typeHandler jdbcTypeName expression(未来准备支持的功能)
+	
+	jdbcType 通常需要在某种特定的条件下被设置
+			   在某些数据为Null 的时候 有些数据库可能不能识别mybatis对NULL的默认处理
+				比如 oracle 
+				 org.apache.ibatis.type.TypeException: 
+				 	Could not set parameters for mapping: 
+				 		ParameterMapping{property='firstName', mode=IN, javaType=class java.lang.String, jdbcType=null, numericScale=null, resultMapId='null', jdbcTypeName='null', expression='null'}. 
+				 			Cause: org.apache.ibatis.type.TypeException: 
+				 				*Error setting null for parameter #3 with JdbcType OTHER . Try setting a different JdbcType for this parameter or a different jdbcTypeForNull configuration property. 
+				 					Cause: java.sql.SQLException: 
+				 						无效的列类型: 1111
+				 						
+			mybatis 对所有NUll值都映射为 原生JDBC 的 OTHER(Types.OTHER)类型,
+					oracle 对能null值没有规范处理
+					
+			  <insert id="addEmp" parameterType="SimpleDemo.bean.Emp">
+			  	insert into s_emp(id,last_name,first_name,salary,start_date) 
+			  	values(#{id},#{lastName},#{firstName},#{salary},#{startDate})
+			  </insert>	
+		  
+		  	Emp empAdd = new Emp(new BigDecimal(42),"addEmpLast",null,new BigDecimal(3000),new Date(2142141243L));
+			mapper.addEmp(empAdd);
+		  			
+			...>处理：
+			
+					1.sql配置
+					  <insert id="addEmp" parameterType="SimpleDemo.bean.Emp">
+					  	insert into s_emp(id,last_name,first_name,salary,start_date) 
+					  	values(#{id},#{lastName},#{firstName,jdbcType=NULL},#{salary},#{startDate})
+					  	
+					  </insert>	
+					2.全局配置
+						<settings>
+							<setting name="mapUnderscoreToCamelCase" value="true"/>
+							<setting name="jdbcTypeForNull" value="NULL"/>
+						</settings>	
+					
+			//与数据库字段的对应
+			public enum JdbcType {
+			  /*
+			   * This is added to enable basic support for the
+			   * ARRAY data type - but a custom type handler is still required
+			   */
+			  ARRAY(Types.ARRAY),
+			  BIT(Types.BIT),
+			  TINYINT(Types.TINYINT),
+			  SMALLINT(Types.SMALLINT),
+			  INTEGER(Types.INTEGER),
+			  BIGINT(Types.BIGINT),
+			  FLOAT(Types.FLOAT),
+			  REAL(Types.REAL),
+			  DOUBLE(Types.DOUBLE),
+			  NUMERIC(Types.NUMERIC),
+			  DECIMAL(Types.DECIMAL),
+			  CHAR(Types.CHAR),
+			  VARCHAR(Types.VARCHAR),
+			  LONGVARCHAR(Types.LONGVARCHAR),
+			  DATE(Types.DATE),
+			  TIME(Types.TIME),
+			  TIMESTAMP(Types.TIMESTAMP),
+			  BINARY(Types.BINARY),
+			  VARBINARY(Types.VARBINARY),
+			  LONGVARBINARY(Types.LONGVARBINARY),
+			  NULL(Types.NULL),
+			  OTHER(Types.OTHER),
+			  BLOB(Types.BLOB),
+			  CLOB(Types.CLOB),
+			  BOOLEAN(Types.BOOLEAN),
+			  CURSOR(-10), // Oracle
+			  UNDEFINED(Integer.MIN_VALUE + 1000),
+			  NVARCHAR(Types.NVARCHAR), // JDK6
+			  NCHAR(Types.NCHAR), // JDK6
+			  NCLOB(Types.NCLOB), // JDK6
+			  STRUCT(Types.STRUCT),
+			  JAVA_OBJECT(Types.JAVA_OBJECT),
+			  DISTINCT(Types.DISTINCT),
+			  REF(Types.REF),
+			  DATALINK(Types.DATALINK),
+			  ROWID(Types.ROWID), // JDK6
+			  LONGNVARCHAR(Types.LONGNVARCHAR), // JDK6
+			  SQLXML(Types.SQLXML), // JDK6
+			  DATETIMEOFFSET(-155), // SQL Server 2008
+			  TIME_WITH_TIMEZONE(Types.TIME_WITH_TIMEZONE), // JDBC 4.2 JDK8
+			  TIMESTAMP_WITH_TIMEZONE(Types.TIMESTAMP_WITH_TIMEZONE); // JDBC 4.2 JDK8

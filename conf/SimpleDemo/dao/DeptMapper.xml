@@ -1,0 +1,95 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+  
+<mapper namespace="SimpleDemo.dao.DeptMapper">
+
+	<!-- public Dept getDeptById(Integer id); -->
+	<select id="getDeptById" resultType="SimpleDemo.bean.Dept">
+		select id,name,region_id from s_dept where id=#{id}
+	</select>
+	
+	<!-- 嵌套结果集的方式，定义关联的集合类型元素的封装规则 -->
+	<resultMap type="SimpleDemo.bean.Dept" id="mydept">
+		<id column="dept_id" property="id"/>
+		<result column="dept_name" property="name"/>
+		<result column="region_id" property="regionId"/>
+		
+		<!-- collection 定义集合类型的属性的封装规则 
+		
+						嵌套结果集的方式，定义关联的集合类型元素的封装规则
+		
+				property="emps" ：				指定集合里面元素的类型
+				ofType="SimpleDemo.bean.Emp"：	
+		-->
+		<collection property="emps" ofType="SimpleDemo.bean.Emp">
+			<!-- 定义集合中元素的封装规则 -->
+		  	<id column="id" property="id"/>
+		  	<result column="last_name" property="lastName"/>
+		  	<result column="first_name" property="firstName"/>
+		  	<result column="salary" property="salary"/>
+		  	<result column="start_date" property="startDate"/>
+		</collection>
+	</resultMap>
+	
+	<!-- public Dept getDeptByIdPlus(Integer id); -->
+	<select id="getDeptByIdPlus" resultMap="mydept">
+      SELECT d.id dept_id,d.name dept_name,d.region_id region_id,
+                  e.id id,e.last_name last_name,e.first_name first_name,e.salary salary,e.start_date start_date
+      FROM s_dept d,s_emp e
+      WHERE d.id= e.dept_id
+      AND
+      e.dept_id =#{id}
+	</select>
+	
+	<resultMap type="SimpleDemo.bean.Dept" id="mydept2">
+		<id column="dept_id" property="id"/>
+		<result column="dept_name" property="name"/>
+		<result column="region_id" property="regionId"/>
+		
+		<collection property="emps" select="SimpleDemo.dao.EmpMapper.getEmpByDeptID"
+					column="{deptID=dept_id}" fetchType="eager"><!-- column="dept_id"  fetchType="eager" 立即查询-->
+					
+					<!-- 参考WHERE dept_id =#{deptID}
+						  < public List<Emp> getEmpByDeptID(Integer deptID); >
+							  <select id="getEmpByDeptID" resultType="SimpleDemo.bean.Emp">
+							  	SELECT id,last_name,first_name,salary,start_date  
+							  	FROM s_emp
+							  	WHERE dept_id =#{deptID}
+							  </select>
+					
+					 -->
+					
+		</collection>
+		
+	<!-- 
+		<association property="emps" select="SimpleDemo.dao.EmpMapper.getEmpByDeptID" 
+					column="dept_id">
+		</association>
+	 -->	
+	
+	</resultMap>
+	
+	<!-- public Dept getDeptByIdStep(Integer deptID); -->
+	<select id="getDeptByIdStep" resultMap="mydept2">
+		SELECT id dept_id,name dept_name,region_id region_id 
+		FROM s_dept
+		WHERE id = #{id}
+	</select>
+</mapper>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
